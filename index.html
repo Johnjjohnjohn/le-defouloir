@@ -102,6 +102,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
 .ed-foot{position:sticky;bottom:-18px;background:var(--bg);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding-block:12px 18px;border-top:3px solid var(--ink)}
 .ed-foot .btn{font-size:15px;padding:8px 2px}
 
+.ask{position:absolute;left:12px;right:12px;bottom:12px;z-index:3;background:var(--paper);color:var(--ink);border:4px solid var(--ink);border-radius:12px;box-shadow:4px 4px 0 var(--ink);padding:12px;display:flex;flex-direction:column;gap:10px;align-items:center;text-align:center}
+.ask b{font-family:var(--display);font-size:26px;letter-spacing:.04em;font-weight:400}
+
 /* fin */
 .stats{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 .stat{background:var(--paper);color:var(--ink);border:3px solid var(--ink);border-radius:8px;box-shadow:3px 3px 0 var(--ink);padding:8px 14px;min-width:84px}
@@ -120,7 +123,12 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--yellow);outline
     <button class="mini" id="mute" aria-pressed="false" aria-label="Couper le son">Son</button>
   </header>
 
-  <div class="stage"><canvas id="cv" aria-label="Zone de jeu : touche le personnage pour frapper"></canvas></div>
+  <div class="stage"><canvas id="cv" aria-label="Zone de jeu : touche le personnage pour frapper"></canvas>
+    <div class="ask" id="ask" hidden role="dialog" aria-label="Alors, ça va mieux ?">
+      <b>Alors, ça va mieux ?</b>
+      <div class="after"><button class="btn hit" id="askYes">Oui, ça va mieux</button><button class="btn ghost" id="askNo">Je continue</button></div>
+    </div>
+  </div>
 
   <nav class="moves" aria-label="Coups">
     <button class="move" data-w="slap" aria-pressed="true">
@@ -607,6 +615,7 @@ function drawPortrait(canvas, L, slot) {
 let phase = 'title', pt = 0, clock = 0, startTime = 0, mood = MOODS[1];
 let queue = [0], qi = 0, slot = 0, L = looks[0], hp = 100, hpMax = 100;
 let st = idleState();
+let lastAct = 0;
 let weapon = 'slap', lastHit = -9, lastTaunt = 0, combo = 0, bestCombo = 0, totalHits = 0, altSide = 1;
 let shake = 0, flash = 0, parts = [], words = [], attacks = [], bubble = null, roundGong = false;
 const pointer = { x: 200, y: 300 };
@@ -636,7 +645,7 @@ function buildMoods() {
   }
 }
 function openRoster() {
-  phase = 'menu'; attacks = []; bubble = null;
+  phase = 'menu'; attacks = []; bubble = null; $('ask').hidden = true;
   $('moodLine').textContent = `Humeur : ${mood.label}. Touche « Modifier » pour lui donner le nom et la tête que tu veux.`;
   const g = $('grid'); g.innerHTML = '';
   looks.forEach((lk, i) => {
@@ -718,21 +727,25 @@ function startFight(slots) {
   show(null); startIntro();
 }
 function startIntro() {
+  $('ask').hidden = true; lastAct = clock;
   phase = 'intro'; pt = 0; slot = queue[qi]; L = looks[slot]; hpMax = mood.hp; hp = hpMax;
   st = idleState(); st.oy = 440;
   bubble = null; parts = []; words = []; attacks = []; roundGong = false; combo = 0;
   updateHUD(); sfx.whoosh();
 }
-function startKO() { phase = 'ko'; pt = 0; flash = 1; st.dizzy = 99; attacks = []; bubble = null; combo = 0; sfx.ko(); }
-function endGame() {
-  phase = 'end';
+function startKO() { $('ask').hidden = true; phase = 'ko'; pt = 0; flash = 1; st.dizzy = 99; attacks = []; bubble = null; combo = 0; sfx.ko(); }
+function endGame(early) {
+  phase = 'end'; $('ask').hidden = true; attacks = [];
   const s = Math.round(clock - startTime);
-  $('endTitle').textContent = queue.length > 1 ? 'Tout le monde est K.O. !' : `${L.name} est K.O. !`;
+  $('endTitle').textContent = early ? 'Pause bien méritée !' : queue.length > 1 ? 'Tout le monde est K.O. !' : `${L.name} est K.O. !`;
   $('sHits').textContent = totalHits; $('sCombo').textContent = bestCombo;
   $('sTime').textContent = s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`;
-  $('feel').hidden = false; $('afterMsg').hidden = true;
+  $('feel').hidden = !!early;
+  const m = $('afterMsg'); m.textContent = 'Tant mieux ! Respire un bon coup, et reviens quand tu veux.'; m.hidden = !early;
   show('scr-end');
 }
+$('askYes').addEventListener('click', () => endGame(true));
+$('askNo').addEventListener('click', () => { $('ask').hidden = true; lastAct = clock; lastTaunt = clock; });
 $('better').addEventListener('click', () => { $('feel').hidden = true; const m = $('afterMsg'); m.textContent = 'Tant mieux ! Respire un bon coup, et reviens quand tu veux.'; m.hidden = false; });
 $('still').addEventListener('click', () => { const i = MOODS.indexOf(mood); if (mood.level && mood.level < 4) mood = MOODS[i + 1]; openRoster(); });
 $('again').addEventListener('click', () => { sfx.ensure(); startFight(queue); });
@@ -753,7 +766,7 @@ function word(txt, x, y, size, color, rot) { words.push({ txt, x, y, size, color
 
 function applyHit(a) {
   const s = a.side, hx = 200 + st.ox, hy = headCY(L) + st.oy, f = mood.funny, sk = mood.shake;
-  totalHits++;
+  totalHits++; lastAct = clock; $('ask').hidden = true;
   combo = clock - lastHit < .7 ? combo + 1 : 1; lastHit = clock; bestCombo = Math.max(bestCombo, combo);
   const dmg = W[a.type].dmg * (combo >= 5 ? 1.25 : 1);
   st.hurt = .4; bubble = null;
@@ -805,9 +818,11 @@ function update(dt) {
     if (pt < 1.3) { st.oy = (1 - easeOutBack(clamp((pt - .3) / .9))) * 440; st.ovy = 0; }
     if (pt >= 1.4 && pt < 1.5 && !bubble && L.phrase) bubble = { text: L.phrase, t: 0, dur: 2.2 };
     if (pt >= 3.0 && !roundGong) { roundGong = true; sfx.gong(); }
-    if (pt >= 4.4) { phase = 'play'; pt = 0; lastHit = clock; lastTaunt = clock; }
+    if (pt >= 4.4) { phase = 'play'; pt = 0; lastHit = clock; lastTaunt = clock; lastAct = clock; }
   } else if (phase === 'play') {
-    if (clock - lastHit > 3 && clock - lastTaunt > 3.5 && !bubble) { bubble = { text: pick(tauntsFor()), t: 0, dur: 2.4 }; lastTaunt = clock; }
+    const asking = !$('ask').hidden;
+    if (!asking && totalHits > 0 && clock - lastAct > 7) { $('ask').hidden = false; bubble = null; }
+    else if (!asking && clock - lastHit > 3 && clock - lastTaunt > 3.5 && !bubble) { bubble = { text: pick(tauntsFor()), t: 0, dur: 2.4 }; lastTaunt = clock; }
   } else if (phase === 'ko') {
     st.angle = Math.sin(pt * 5) * .28; st.av = 0;
     if (pt > 1.4) { const f = easeInCubic(clamp((pt - 1.4) / .7)); st.oy = f * 520; st.ovy = 0; st.bodyAngle = f * .35; }
