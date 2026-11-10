@@ -1053,13 +1053,58 @@ function dotPattern() {
   g.fillStyle = 'rgba(27,20,16,.1)'; g.beginPath(); g.arc(5, 5, 1.6, 0, TAU); g.fill();
   return (dots = ctx.createPattern(o, 'repeat'));
 }
+/* ---------- panneau de sponsors (façon interview d'après-match) ----------
+   Sponsors inventés. Pour mettre de vrais partenaires plus tard, il suffit de changer cette liste. */
+const SPONSORS = [
+  { txt: () => t('brand'), style: 'box', bg: '#ef3e36', fg: '#fffaf0' },
+  { txt: () => 'K.O. ENERGY', style: 'disc', bg: '#ffd23f', fg: '#1b1410' },
+  { txt: () => 'PAF COLA', style: 'script', fg: '#d62828' },
+  { txt: () => 'BOBO BANK', style: 'box', bg: '#2b3a67', fg: '#fffaf0' },
+  { txt: () => 'COMBO AIR', style: 'swoosh', fg: '#2f8f5b' },
+  { txt: () => 'ICE PACK+', style: 'pill', bg: '#4f9fe0', fg: '#fffaf0' }
+];
+function drawSponsor(c, sp, x, y, k, maxW) {
+  const txt = sp.txt(); c.save(); c.translate(x, y); c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
+  c.font = `${24 * k}px Bangers, Impact, sans-serif`; const full = c.measureText(txt).width + 40 * k;
+  if (full > maxW) { const f = maxW / full; c.scale(f, f); }
+  if (sp.style === 'script') { c.rotate(-.08); c.font = `italic ${30 * k}px Bangers, Impact, sans-serif`; c.fillStyle = sp.fg; c.fillText(txt, 0, 0); }
+  else if (sp.style === 'swoosh') {
+    c.font = `${24 * k}px Bangers, Impact, sans-serif`; c.fillStyle = sp.fg; c.fillText(txt, 0, -3 * k);
+    const w = c.measureText(txt).width; c.strokeStyle = sp.fg; c.lineWidth = 3 * k; c.beginPath(); c.moveTo(-w / 2, 12 * k); c.quadraticCurveTo(0, 20 * k, w / 2 + 8 * k, 6 * k); c.stroke();
+  } else {
+    c.font = `${(sp.style === 'disc' ? 19 : 21) * k}px Bangers, Impact, sans-serif`;
+    const w = c.measureText(txt).width, h = 32 * k;
+    c.fillStyle = sp.bg; c.strokeStyle = '#1b1410'; c.lineWidth = 2.5 * k;
+    if (sp.style === 'disc') { c.beginPath(); c.arc(-w / 2 - 4 * k, 0, 15 * k, 0, TAU); c.fill(); c.stroke(); c.fillStyle = sp.fg; c.fillText(txt, 14 * k, 0); c.font = `${17 * k}px Bangers, Impact, sans-serif`; c.fillText('⚡', -w / 2 - 4 * k, 1 * k); }
+    else { rr(c, -w / 2 - 12 * k, -h / 2, w + 24 * k, h, sp.style === 'pill' ? h / 2 : 5 * k); c.fill(); c.stroke(); c.fillStyle = sp.fg; c.fillText(txt, 0, 1 * k); }
+  }
+  c.restore();
+}
+let boardCache = null, boardKey = '';
+function sponsorBoard() {
+  const key = [cw, chh, dpr, scale, lang].join('|');
+  if (boardCache && boardKey === key) return boardCache;
+  const o = document.createElement('canvas'); o.width = Math.max(1, Math.round(cw * dpr)); o.height = Math.max(1, Math.round(chh * dpr));
+  const c = o.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.fillStyle = '#f4f1ea'; c.fillRect(0, 0, cw, chh);
+  const k = Math.max(.6, scale), cwid = 184 * k, chei = 70 * k;
+  for (let r = -1, row = 0; r * chei < chh + chei; r++, row++) {
+    for (let col = -1; col * cwid < cw + cwid; col++) {
+      const x = col * cwid + (row % 2 ? cwid / 2 : 0) + cwid / 2, y = r * chei + chei / 2;
+      const idx = ((col + 7) * 2 + row * 3) % SPONSORS.length;
+      drawSponsor(c, SPONSORS[idx], x, y, k, cwid * .86);
+    }
+  }
+  boardCache = o; boardKey = key; return o;
+}
+try { document.fonts && document.fonts.ready.then(() => { boardCache = null; }); } catch (e) {}
+
 function drawBG() {
-  const c = ctx, bg = phase === 'title' ? ['#ef3e36', '#f35c53'] : BGS[slot % 6];
-  const cx = offx + 200 * scale, cy = offy + headCY(L) * scale;
-  rays(c, cw, chh, cx, cy, bg, reduce ? 0 : clock * .05);
-  c.fillStyle = dotPattern(); c.fillRect(0, 0, cw, chh);
+  const c = ctx, cx = offx + 200 * scale, cy = offy + headCY(L) * scale;
+  if (phase === 'title') { rays(c, cw, chh, cx, cy, ['#ef3e36', '#f35c53'], reduce ? 0 : clock * .05); c.fillStyle = dotPattern(); c.fillRect(0, 0, cw, chh); }
+  else { c.drawImage(sponsorBoard(), 0, 0, cw, chh); }
   const R = Math.hypot(cw, chh), g = c.createRadialGradient(cx, cy, R * .2, cx, cy, R * .75);
-  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, mood.rage && phase === 'play' ? `rgba(140,0,0,${.45 + .15 * Math.sin(clock * 6)})` : 'rgba(20,10,30,.45)');
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, mood.rage && phase === 'play' ? `rgba(140,0,0,${.45 + .15 * Math.sin(clock * 6)})` : phase === 'title' ? 'rgba(20,10,30,.45)' : 'rgba(20,10,30,.28)');
   c.fillStyle = g; c.fillRect(0, 0, cw, chh);
 }
 function drawParts() {
