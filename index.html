@@ -473,11 +473,11 @@ const sfx = (() => {
       out.connect(master); o.start(t); o.stop(t + dur + .05);
     },
     kiaiWa(f) { /* « WA… » pendant que le genou monte */
-      this.voice(.3, [[0, 250], [.09, 330], [.3, 370]], [[0, [320, 700, 2300]], [.11, [760, 1180, 2500]], [.3, [780, 1220, 2600]]], [[.03, .55], [.22, .5], [.3, 0]], f ? 1.7 : 1);
+      this.voice(.2, [[0, 150], [.07, 185], [.2, 200]], [[0, [300, 650, 2100]], [.08, [680, 1080, 2300]], [.2, [700, 1100, 2350]]], [[.03, .5], [.15, .45], [.2, 0]], f ? 1.5 : 1);
     },
     kiaiTah(f) { /* « TAAAAH ! » perçant à l'impact */
       noise(.03, 3800, .7, .9, 'highpass');
-      this.voice(.75, [[0, 560], [.07, 730], [.4, 700], [.75, 470]], [[0, [920, 1320, 2850]], [.75, [820, 1220, 2650]]], [[.02, 1], [.5, .85], [.75, 0]], f ? 1.6 : 1, .04);
+      this.voice(.32, [[0, 260], [.05, 330], [.2, 310], [.32, 220]], [[0, [720, 1150, 2500]], [.32, [640, 1050, 2350]]], [[.02, 1], [.18, .85], [.32, 0]], f ? 1.5 : 1, .02);
     },
     kick(f) { if (f) { tone(900, 200, .3, .4, 'sawtooth'); return; } noise(0.12, 1200, 1, 0.5, 'bandpass', 4000); tone(200, 60, 0.25, 0.9); noise(0.08, 3500, 0.8, 0.8, 'highpass'); },
     pan(f) { if (f) { tone(500, 1400, .35, .4, 'triangle'); tone(1400, 2600, .2, .15); return; } noise(.04, 3500, 1, .9, 'highpass'); tone(523, 515, 1.3, .5, 'triangle'); tone(1390, 1372, 1.0, .22); tone(2230, 2205, .7, .12); tone(140, 70, .25, .6); },
@@ -941,7 +941,8 @@ function applyHit(a) {
   const s = a.side, hx = 200 + st.ox, hy = headCY(L) + st.oy, f = mood.funny, sk = mood.shake;
   totalHits++; lastAct = clock; $('ask').hidden = true;
   combo = clock - lastHit < .7 ? combo + 1 : 1; lastHit = clock; bestCombo = Math.max(bestCombo, combo);
-  const dmg = W[a.type].dmg * (combo >= 5 ? 1.25 : 1);
+  const fatal = a.type === 'kick' && hp / hpMax < .35;
+  const dmg = fatal ? hp + 1 : W[a.type].dmg * (combo >= 5 ? 1.25 : 1);
   st.hurt = .4; bubble = null;
   if (a.type === 'slap') {
     st.av += -s * 6.5; st.ovx += -s * 320;
@@ -970,12 +971,14 @@ function applyHit(a) {
     sfx.pie(f); shake = 7 * sk;
     word(pick(T().fx[f ? 'pieF' : 'pie']), 200 - s * 90, hy - 110, 56, '#fffaf0', s * .12);
   } else if (a.type === 'kick') {
-    st.av += -s * 9; st.ovx += -s * 380; st.ovy += 60; st.svx += 1.6; st.svy -= 1.2;
-    st.dizzy = 1.1; stars(hx, hy - 100, 5); burst(hx + s * 85, hy - 60, 13);
+    st.av += -s * 6; st.ovx += -s * 200; st.ovy -= 140; st.svx += 2.6; st.svy -= 2.2; st.blackEye = 1;
+    drops(hx, hy - 30, 5); if (Math.random() < .5) parts.push({ k: 'tooth', x: hx, y: hy + 60, vx: rand(-180, 180), vy: -440, g: 1000, life: 1.1, max: 1.1, rot: 0, vr: rand(-14, 14) });
+    st.dizzy = 1.1; stars(hx, hy - 100, 5); burst(hx + s * 18, hy + 6, 14);
     if (st.bumps.length < 3) st.bumps.push({ x: s * rand(40, 60), y: -80, r: 0, target: rand(12, 18) });
     sfx.kick(f); sfx.kiaiTah(f); shake = 13 * sk; flash = .45; slowmo = .4;
     words = words.filter(w => w.txt !== 'WA…'); word(pick(T().fx.kiai), 200, 450, 50, '#fffaf0', -s * .05);
     word(pick(T().fx[f ? 'kickF' : 'kick']), hx - s * 60, hy - 120, 54, '#ffd23f', -s * .12);
+    if (fatal) { flash = .9; slowmo = .7; shake = 20 * sk; word(T().ui.ko, 200, 240, 80, '#ef3e36', -.06); }
   } else {
     st.svy -= 4.6; st.svx += 3; st.ovy += 220;
     if (st.bumps.length < 3) st.bumps.push({ x: rand(-34, 34), y: -96, r: 0, target: rand(14, 20) });
@@ -1218,7 +1221,7 @@ function kickPose(a, hx, hy) {
   const s = a.side, t = a.t, H = [200 + s * 40, 900];
   const kneeLow = [200 + s * 110, 840], kneeUp = [200 + s * 215, hy + 120], kneeOut = [200 + s * 235, hy + 70];
   const fold = (K) => [K[0] + s * 50, K[1] + 150];
-  const C = [hx + s * 92, hy - 88];
+  const C = [hx + s * 18, hy + 6]; /* plein visage */
   let K, F;
   if (t < .3) { const u = easeOutCubic(t / .3); K = [lerp(kneeLow[0], kneeUp[0], u), lerp(kneeLow[1], kneeUp[1], u)]; F = fold(K); }
   else if (t < a.contact) {
